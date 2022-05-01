@@ -1,98 +1,33 @@
-cmake_minimum_required(VERSION 3.16)
-project(TFLowering)
+cmake_minimum_required(VERSION 3.13.4)
+project(tensor-info-collector LANGUAGES CXX C)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_FLAGS "-std=c++20 -Wall -O0 -fno-rtti ${LLVM_COMPILE_FLAGS}")
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
 
-set(LLVM_LINK_COMPONENTS support)
-set(CMAKE_BUILD_TYPE Debug)
+find_package(MLIR REQUIRED CONFIG)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-find_package(MLIR REQUIRED CONFIG NO_DEFAULT_PATH)
-message(STATUS "Using MLIRConfig.cmake in:  ${MLIR_DIR}")
-
-find_package(LLVM REQUIRED CONFIGS NO_DEFAULT_PATH)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
+
+set(LLVM_RUNTIME_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/bin)
+set(LLVM_LIBRARY_OUTPUT_INTDIR ${CMAKE_BINARY_DIR}/lib)
+set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
-
+include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
-include(TableGen)
+include(HandleLLVMOptions)
 
-include_directories(${MLIR_INCLUDE_DIRS})
-message(STATUS "including ${MLIR_INCLUDE_DIRS}")
-include_directories(${CLANG_INCLUDE_DIRS})
-message(STATUS "including ${CLANG_INCLUDE_DIRS}")
 include_directories(${LLVM_INCLUDE_DIRS})
-message(STATUS "including ${LLVM_INCLUDE_DIRS}")
-
-get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
-get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
-
-set(LIBS
-    ${dialect_libs}
-    ${conversion_libs}
-    MLIRLoopAnalysis
-    MLIRAnalysis
-    MLIRDialect
-    MLIREDSC
-    MLIROptLib
-    MLIRParser
-    MLIRPass
-    MLIRTransforms
-    MLIRTransformUtils
-    MLIRSupport
-    MLIRIR
-    )
-
-set(MLIR_LIBS
-    MLIRAffineToStandard
-    MLIRAffineTransforms
-    MLIRLinalgTransforms
-    MLIRLLVMToLLVMIRTranslation
-    MLIRMathTransforms
-    MLIROptLib
-    MLIRSCFToStandard
-    MLIRShapeToStandard
-    )
-
+include_directories(${MLIR_INCLUDE_DIRS})
+include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_BINARY_DIR}/include)
+link_directories(${LLVM_BUILD_LIBRARY_DIR})
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
 add_definitions(${LLVM_DEFINITIONS})
 
-include_directories(${LLVM_INCLUDE_DIRS})
-link_directories(${LLVM_LIBRARY_DIRS})
-
-add_executable(tf-lowering main.cpp)
-
-target_link_libraries(
-    tf-lowering
-    PRIVATE
-    ${LLVM_AVAILABLE_LIBS}
-    ${LLVM_LIBS}
-    ${MLIR_LIBS}
-    ${LIBS}
-
-    MLIRAnalysis
-    MLIRCallInterfaces
-    MLIRCastInterfaces
-    MLIRExecutionEngine
-    MLIRIR
-    MLIRLLVMToLLVMIRTranslation
-    MLIRMemRef
-    MLIRParser
-    MLIRPass
-    MLIRSideEffectInterfaces
-    MLIRTargetLLVMIRExport
-    MLIRTransforms
-
-
-    LLVMAMDGPUCodeGen
-    LLVMAMDGPUDesc
-    LLVMAMDGPUInfo
-    LLVMAMDGPUAsmParser)
+add_subdirectory(tensor-info-collector)
