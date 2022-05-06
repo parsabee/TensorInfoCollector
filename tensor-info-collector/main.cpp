@@ -49,13 +49,13 @@ public:
       for(int i = 0; i < indentation; i++) out << ' ';
     }
     template <typename ...Args>
-    void print(Args ...args) {
+    void print(Args&& ...args) {
       ([this](const auto &arg) {
         out << arg;
       }(args),...);
     }
     template <typename ...Args>
-    void println(Args ...args) {
+    void println(Args&& ...args) {
       print(std::forward<Args>(args)...);
       out << "\n";
     }
