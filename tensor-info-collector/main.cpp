@@ -1,15 +1,29 @@
-#include "mlir/IR/AsmState.h"
-#include "mlir/IR/Builders.h"
+
+// MIT No Attribution
+
+// Copyright 2022 Luminous Computing, Inc.
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this
+// software and associated documentation files (the "Software"), to deal in the Software
+// without restriction, including without limitation the rights to use, copy, modify,
+// merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+// PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+// SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/OpImplementation.h"
-#include "mlir/InitAllDialects.h" // from @llvm-project
-#include "mlir/InitAllPasses.h"   // from @llvm-project
+#include "mlir/InitAllDialects.h"
+#include "mlir/InitAllPasses.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -98,9 +112,9 @@ public:
 
 class StringNode : public JSONNode, public std::string {
 public:
-  StringNode(const std::string &str) : std::string(str) {}
-  StringNode(std::string &&str) : std::string(std::move(str)) {}
-  StringNode(int64_t num) : std::string(std::to_string(num)) {}
+  explicit StringNode(const std::string &str) : std::string(str) {}
+  explicit StringNode(std::string &&str) : std::string(std::move(str)) {}
+  explicit StringNode(int64_t num) : std::string(std::to_string(num)) {}
   void dump(PrintContext pctx) const override {
     pctx.print("\"", *this, "\"");
   }
@@ -111,12 +125,33 @@ static size_t computeSize(const TensorType &tensor) {
     return 0;
 
   auto bsize = tensor.getElementTypeBitWidth() / 8;
-  return std::accumulate(tensor.getShape().begin(), tensor.getShape().end(),
-                         bsize, std::multiplies<>());
+  return bsize * tensor.getNumElements();
 }
 
 class OpsDataBase
     : public std::unordered_map<std::string, std::vector<mlir::TensorType>> {
+  OpsDataBase() = default;
+  std::unique_ptr<DictionaryNode> tensorToJSON(TensorType tensor) const {
+    auto operandInfo = make<DictionaryNode>();
+    operandInfo->insert({"size", make<StringNode>(computeSize(tensor))});
+    if (tensor.hasRank())
+      operandInfo->insert({"rank", make<StringNode>(tensor.getRank())});
+    if (tensor.hasStaticShape()) {
+      std::string shape;
+      if (tensor.getShape().empty())
+        shape = "1";
+      else {
+        llvm::raw_string_ostream ss(shape);
+        llvm::interleave(tensor.getShape(), ss, ",");
+      }
+      operandInfo->insert({"shape", make<StringNode>(std::move(shape))});
+    }
+    std::string name;
+    llvm::raw_string_ostream ss(name);
+    tensor.getElementType().print(ss);
+    operandInfo->insert({"type", make<StringNode>(std::move(name))});
+    return operandInfo;
+  }
 public:
   std::unique_ptr<JSONNode> toJSON() const {
     auto root = make<ListNode>();
@@ -124,27 +159,9 @@ public:
       auto entry = make<DictionaryNode>();
       entry->insert({"name", make<StringNode>(op)});
       auto operandsList = make<ListNode>();
-      for (const auto &tensor : tensorOperands) {
-        auto operandInfo = make<DictionaryNode>();
-        operandInfo->insert({"size", make<StringNode>(computeSize(tensor))});
-        if (tensor.hasRank())
-          operandInfo->insert({"rank", make<StringNode>(tensor.getRank())});
-        if (tensor.hasStaticShape()) {
-          std::string shape;
-          if (tensor.getShape().empty())
-            shape = "1";
-          else {
-            llvm::raw_string_ostream ss(shape);
-            llvm::interleave(tensor.getShape(), ss, ",");
-          }
-          operandInfo->insert({"shape", make<StringNode>(std::move(shape))});
-        }
-        std::string name;
-        llvm::raw_string_ostream ss(name);
-        tensor.getElementType().print(ss);
-        operandInfo->insert({"type", make<StringNode>(std::move(name))});
-        operandsList->push_back(std::move(operandInfo));
-      }
+      for (const auto &tensor : tensorOperands)
+        operandsList->push_back(tensorToJSON(tensor));
+
       entry->insert({"tensor_operands", std::move(operandsList)});
       root->push_back(std::move(entry));
     }
@@ -205,12 +222,9 @@ int main(int argc, char **argv) {
   if (argc != 2)
     printErrorAndExit(std::string("Usage: ") + argv[0] + " <filename>.mlir");
 
-  mlir::registerAllPasses();
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
   mlir::MLIRContext mlirContext(registry, MLIRContext::Threading::DISABLED);
-
-  mlirContext.loadAllAvailableDialects();
   mlirContext.allowUnregisteredDialects();
 
   auto optionalModule = readModule(argv[1], &mlirContext);
