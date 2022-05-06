@@ -224,7 +224,7 @@ int main(int argc, char **argv) {
   if (failed(pm.run(moduleOp)))
     printErrorAndExit("Failed to run the pass");
 
-  auto db = OpsDataBase::get();
+  auto &db = OpsDataBase::get();
   db.toJSON()->dump();
   std::exit(0);
 }
